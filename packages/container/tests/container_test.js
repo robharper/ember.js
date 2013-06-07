@@ -160,12 +160,43 @@ test("A non-singleton factory is never cached", function() {
   ok(postView1 !== postView2, "Non-singletons are not cached");
 });
 
+test("A lookup can request a singleton, overriding the factory's default", function() {
+  var container = new Container();
+  var PostView = factory();
+
+  container.register('view:post', PostView, { singleton: false });
+
+  var postView1 = container.lookup('view:post');
+  var postView2 = container.lookup('view:post', { singleton: true });
+  var postView3 = container.lookup('view:post', { singleton: true });
+  var postView4 = container.lookup('view:post');
+
+  notEqual(postView1, postView2, "The first request for a singleton returns a new instance");
+  equal(postView2, postView3, "Subsequent singleton look ups return the same value");
+  notEqual(postView2, postView4, "Subsequent non-singleton look ups return a unique value");
+  notEqual(postView1, postView4, "Two general (non-singleton) look ups return unique instances");
+
+  ok(postView1 instanceof PostView, "All instances are instances of the registered factory");
+  ok(postView2 instanceof PostView, "All instances are instances of the registered factory");
+  ok(postView3 instanceof PostView, "All instances are instances of the registered factory");
+  ok(postView4 instanceof PostView, "All instances are instances of the registered factory");
+});
+
 test("A non-instantiated property is not instantiated", function() {
   var container = new Container();
 
   var template = function() {};
   container.register('template:foo', template, { instantiate: false });
   equal(container.lookup('template:foo'), template);
+});
+
+test("A lookup can request no instantiation, overriding the factory's default", function() {
+  var container = new Container();
+  var PostController = factory();
+
+  container.register('controller:post', PostController);
+
+  equal(container.lookup('controller:post', { instantiate: false }), PostController);
 });
 
 test("A failed lookup returns undefined", function() {

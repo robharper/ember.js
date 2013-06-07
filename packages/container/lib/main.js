@@ -102,17 +102,17 @@ define("container",
       lookup: function(fullName, options) {
         fullName = this.normalize(fullName);
 
-        options = options || {};
-
-        if (this.cache.has(fullName) && options.singleton !== false) {
+        if (this.cache.has(fullName) && isSingleton(this, fullName, options)) {
           return this.cache.get(fullName);
         }
 
-        var value = instantiate(this, fullName);
+        var value = instantiate(this, fullName, options);
 
         if (!value) { return; }
 
-        if (isSingleton(this, fullName) && options.singleton !== false) {
+        // Only store singleton objects that have been instantiated in the cache. Non-instantiated
+        // factories are not cached. Result is cache only contains object that container created.
+        if (isSingleton(this, fullName, options) && shouldInstantiate(this, fullName, options)) {
           this.cache.set(fullName, value);
         }
 
@@ -188,10 +188,16 @@ define("container",
       throw new Error(operation + " is not currently supported on child containers");
     }
 
-    function isSingleton(container, fullName) {
-      var singleton = option(container, fullName, 'singleton');
+    function isSingleton(container, fullName, overrides) {
+      var singleton = option(container, fullName, 'singleton', overrides);
 
       return singleton !== false;
+    }
+
+    function shouldInstantiate(container, fullName, overrides) {
+      var instantiate = option(container, fullName, 'instantiate', overrides);
+
+      return instantiate !== false;
     }
 
     function buildInjections(container, injections) {
@@ -210,7 +216,13 @@ define("container",
       return hash;
     }
 
-    function option(container, fullName, optionName) {
+    // Return option value for `fullName`'s `optionName` with optional override
+    // option values provided in `overrides`
+    function option(container, fullName, optionName, overrides) {
+      if (overrides && overrides[optionName] !== undefined) {
+        return overrides[optionName];
+      }
+
       var options = container._options.get(fullName);
 
       if (options && options[optionName] !== undefined) {
@@ -230,14 +242,14 @@ define("container",
       return container.resolve(name);
     }
 
-    function instantiate(container, fullName) {
+    function instantiate(container, fullName, overrides) {
       var factory = factoryFor(container, fullName);
 
       var splitName = fullName.split(":"),
           type = splitName[0],
           value;
 
-      if (option(container, fullName, 'instantiate') === false) {
+      if (shouldInstantiate(container, fullName, overrides) === false) {
         return factory;
       }
 
@@ -257,15 +269,15 @@ define("container",
     }
 
     function eachDestroyable(container, callback) {
+      // Cache only ever contains objects instantiated by the container
       container.cache.eachLocal(function(key, value) {
-        if (option(container, key, 'instantiate') === false) { return; }
         callback(value);
       });
     }
 
     function resetCache(container) {
+      // Cache only ever contains objects instantiated by the container
       container.cache.eachLocal(function(key, value) {
-        if (option(container, key, 'instantiate') === false) { return; }
         value.destroy();
       });
       container.cache.dict = {};
